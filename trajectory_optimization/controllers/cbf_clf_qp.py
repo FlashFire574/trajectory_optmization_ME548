@@ -13,7 +13,6 @@ from cbfax import (
 from dynamaxsys import (
     ControlAffineDynamics
 )
-from ipywidgets import interact
 from matplotlib.patches import Rectangle
 
 class CBFCLFFilter:
