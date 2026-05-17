@@ -1,4 +1,4 @@
-# =============================================================================
+
 # utils/metrics.py
 # Evaluation harness and performance metrics.
 #
@@ -11,16 +11,13 @@
 #
 # Main entry point:
 #   evaluate_controller(controller, dynamics, xs_nom, us_nom, env_config, ...)
-# =============================================================================
 
 import numpy as np
 import jax.numpy as jnp
 from typing import Callable, Dict, List, Optional, Tuple
 
 
-# =============================================================================
 # Collision detection
-# =============================================================================
 
 def check_collision(position: np.ndarray, env, ship_radius: float) -> bool:
     """
@@ -43,9 +40,7 @@ def check_collision(position: np.ndarray, env, ship_radius: float) -> bool:
     return bool(np.any(dists < radii + ship_radius))
 
 
-# =============================================================================
 # Single trial rollout
-# =============================================================================
 
 def rollout(
     controller,
@@ -119,12 +114,12 @@ def rollout(
     history  = np.array(history)   # (T+1, 5)
     controls = np.array(controls)  # (T,   2)
 
-    # ── Tracking error: mean L2 distance in (x, y) from nominal ──────────────
+    #  Tracking error: mean L2 distance in (x, y) from nominal 
     tracking_errors = np.linalg.norm(
         history[:-1, :2] - np.array(xs_nom[:-1, :2]), axis=-1
     )
 
-    # ── Control effort: mean ||u||² ───────────────────────────────────────────
+    #  Control effort: mean ||u||² 
     control_efforts = np.sum(controls ** 2, axis=-1)
 
     return {
@@ -139,9 +134,7 @@ def rollout(
     }
 
 
-# =============================================================================
 # Multi-trial evaluation
-# =============================================================================
 
 def evaluate_controller(
     controller,

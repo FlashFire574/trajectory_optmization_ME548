@@ -1,4 +1,4 @@
-# =============================================================================
+
 # controllers/pid.py
 # Two PID controller classes for spaceship trajectory tracking.
 #
@@ -12,7 +12,6 @@
 # Control outputs: u = (r, a)
 #   r  : turn rate  (rad/s)
 #   a  : thrust magnitude (m/s²)
-# =============================================================================
 
 import jax.numpy as jnp
 import numpy as np
@@ -20,11 +19,9 @@ import numpy as np
 from .base import BaseController
 
 
-# =============================================================================
 # 1. Position-Only PID Controller
 #    Tracks the (x, y) waypoint of the nominal trajectory.
 #    Heading and speed are derived from the position error.
-# =============================================================================
 
 class PositionPIDController(BaseController):
     """
@@ -136,12 +133,10 @@ class PositionPIDController(BaseController):
         return jnp.array([r, a])
 
 
-# =============================================================================
 # 2. Full-State PID Controller
 #    Tracks the full nominal state (x, y, θ, v_x, v_y) waypoint-by-waypoint.
 #    Adapted from the rocket-landing PD structure — separate gain channels
 #    per state component, mapped to spaceship controls (r, a).
-# =============================================================================
 
 class FullStatePIDController(BaseController):
     """

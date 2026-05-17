@@ -1,4 +1,3 @@
-# =============================================================================
 # controllers/state_feedback.py
 # State Feedback Controller using time-varying LQR gains.
 #
@@ -11,7 +10,6 @@
 # Two classes:
 #   StateFeedbackController   — time-varying LQR (recomputed each trial)
 #   InfiniteHorizonLQRController — fixed gains from linearization at midpoint
-# =============================================================================
 
 import jax
 import jax.numpy as jnp
@@ -21,9 +19,7 @@ from typing import Optional
 from .base import BaseController
 
 
-# =============================================================================
 # Helper: backward Riccati recursion
-# =============================================================================
 
 def _compute_lqr_gains(
     dynamics,
@@ -57,13 +53,13 @@ def _compute_lqr_gains(
 
     step_range = jnp.arange(T)
 
-    # ── Linearize dynamics along nominal trajectory ───────────────────────────
+    # Linearize dynamics along nominal trajectory
     # f_x[k] = A_k, f_u[k] = B_k
     f_x, f_u = jax.vmap(
         jax.jacobian(dynamics, (0, 1))
     )(xs_nom[:-1], us_nom, step_range)
 
-    # ── Backward Riccati recursion ────────────────────────────────────────────
+    # Backward Riccati recursion
     P = Q_terminal  # terminal cost-to-go
     Ks = []
 
@@ -84,9 +80,7 @@ def _compute_lqr_gains(
     return Ks
 
 
-# =============================================================================
 # 1. Time-Varying State Feedback (LQR)
-# =============================================================================
 
 class StateFeedbackController(BaseController):
     """
@@ -184,9 +178,7 @@ class StateFeedbackController(BaseController):
         return jnp.array([r, a])
 
 
-# =============================================================================
 # 2. Infinite-Horizon LQR (fixed gains, time-invariant)
-# =============================================================================
 
 class InfiniteHorizonLQRController(BaseController):
     """
