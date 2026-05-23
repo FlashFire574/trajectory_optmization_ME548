@@ -1,10 +1,12 @@
+# `NamedTuple`s are used (more accurately, abused) in this code to minimize dependencies;
+# much better JAX-compatible choices to fit the archetype of "parameterized function"
+# would be `flax.struct.dataclass` or `equinox.Module`.
 from typing import Callable, NamedTuple
+import functools
 import jax
 import jax.numpy as jnp
 import numpy as np; np.seterr(invalid="ignore")
 
-import matplotlib.pyplot as plt; plt.rcParams.update({'font.size': 20})
-from ipywidgets import interact
 
 class LinearDynamics(NamedTuple):
     f_x: jnp.array  # A
@@ -129,3 +131,95 @@ class TotalCost(NamedTuple):
     def __call__(self, xs, us):
         step_range = jnp.arange(us.shape[0])
         return jnp.sum(jax.vmap(self.running_cost)(xs[:-1], us, step_range)) + self.terminal_cost(xs[-1])
+
+
+class EulerIntegrator(NamedTuple):
+    """Discrete time dynamics from time-invariant continuous time dynamics using the Euler method."""
+    ode: Callable
+    dt: float
+
+    @jax.jit
+    def __call__(self, x, u, k):
+        return x + self.dt * self.ode(x, u)
+
+
+class RK4Integrator(NamedTuple):
+    """Discrete time dynamics from time-invariant continuous time dynamics using a 4th order Runge-Kutta method."""
+    ode: Callable
+    dt: float
+
+    @jax.jit
+    def __call__(self, x, u, k):
+        k1 = self.dt * self.ode(x, u)
+        k2 = self.dt * self.ode(x + k1 / 2, u)
+        k3 = self.dt * self.ode(x + k2 / 2, u)
+        k4 = self.dt * self.ode(x + k3, u)
+        return x + (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+
+@functools.partial(jax.jit, static_argnames=["dynamics", "total_cost", "maxiter"])
+def iterative_linear_quadratic_regulator(dynamics, total_cost, x0, u_guess, maxiter=100, atol=1e-3):
+    running_cost, terminal_cost = total_cost
+    n, (N, m) = x0.shape[-1], u_guess.shape
+    step_range = jnp.arange(N)
+
+    xs, us = rollout_state_feedback_policy(dynamics, lambda x, k: u_guess[k], x0, step_range)
+    j = total_cost(xs, us)
+
+    def continuation_criterion(loop_vars):
+        i, _, _, j_curr, j_prev = loop_vars
+        return (j_curr < j_prev - atol) & (i < maxiter)
+
+    def ilqr_iteration(loop_vars):
+        i, xs, us, j_curr, j_prev = loop_vars
+
+        f_x, f_u = jax.vmap(jax.jacobian(dynamics, (0, 1)))(xs[:-1], us, step_range)
+        c = jax.vmap(running_cost)(xs[:-1], us, step_range)
+        c_x, c_u = jax.vmap(jax.grad(running_cost, (0, 1)))(xs[:-1], us, step_range)
+        (c_xx, c_xu), (c_ux, c_uu) = jax.vmap(jax.hessian(running_cost, (0, 1)))(xs[:-1], us, step_range)
+        v, v_x, v_xx = terminal_cost(xs[-1]), jax.grad(terminal_cost)(xs[-1]), jax.hessian(terminal_cost)(xs[-1])
+
+        # Ensure quadratic cost terms are positive definite.
+        c_zz = jnp.block([[c_xx, c_xu], [c_ux, c_uu]])
+        c_zz = jax.vmap(ensure_positive_definite)(c_zz)
+        c_xx, c_uu, c_ux = c_zz[:, :n, :n], c_zz[:, -m:, -m:], c_zz[:, -m:, :n]
+        v_xx = ensure_positive_definite(v_xx)
+
+        linearized_dynamics = LinearDynamics(f_x, f_u)
+        quadratized_running_cost = QuadraticCost(c, c_x, c_u, c_xx, c_uu, c_ux)
+        quadratized_terminal_cost = QuadraticStateCost(v, v_x, v_xx)
+
+        def scan_fn(next_state_value, current_step_dynamics_cost):
+            current_step_dynamics, current_step_cost = current_step_dynamics_cost
+            current_state_value, current_step_policy = riccati_step(
+                current_step_dynamics,
+                current_step_cost,
+                next_state_value,
+            )
+            return current_state_value, current_step_policy
+
+        policy = jax.lax.scan(scan_fn,
+                              quadratized_terminal_cost, (linearized_dynamics, quadratized_running_cost),
+                              reverse=True)[1]
+
+        def rollout_linesearch_policy(alpha):
+            # Note that we roll out the true `dynamics`, not the `linearized_dynamics`!
+            l, l_x = policy
+            return rollout_state_feedback_policy(dynamics, AffinePolicy(alpha * l, l_x), x0, step_range, xs, us)
+
+        # Backtracking line search (step sizes evaluated in parallel).
+        all_xs, all_us = jax.vmap(rollout_linesearch_policy)(0.5**jnp.arange(16))
+        js = jax.vmap(total_cost)(all_xs, all_us)
+        a = jnp.argmin(js)
+        j = js[a]
+        xs = jnp.where(j < j_curr, all_xs[a], xs)
+        us = jnp.where(j < j_curr, all_us[a], us)
+        return i + 1, xs, us, jnp.minimum(j, j_curr), j_curr
+
+    i, xs, us, j, _ = jax.lax.while_loop(continuation_criterion, ilqr_iteration, (0, xs, us, j, jnp.inf))
+
+    return {
+        "optimal_trajectory": (xs, us),
+        "optimal_cost": j,
+        "num_iterations": i,
+    }
