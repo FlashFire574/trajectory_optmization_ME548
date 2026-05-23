@@ -8,7 +8,7 @@ import jax.numpy as jnp
 T  = 125
 dt = 0.1
 
-# Dimensions──
+# Dimensions
 STATE_DIM   = 5   # (x, y, θ, v_x, v_y)
 CONTROL_DIM = 2   # (r, a)
 
@@ -16,7 +16,7 @@ CONTROL_DIM = 2   # (r, a)
 start_state   = np.array([5.,  5.,  0., 0., 0.])
 goal_position = np.array([45., 35.])
 
-# Environment─
+# Environment
 NUM_ASTEROIDS  = 20
 SHIP_RADIUS    = 1.0
 SENSING_RADIUS = 5.0

@@ -7,6 +7,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np; np.seterr(invalid="ignore")
 
+from environment.asteroid_env import Environment
+
 
 class LinearDynamics(NamedTuple):
     f_x: jnp.array  # A
@@ -132,6 +134,12 @@ class TotalCost(NamedTuple):
         step_range = jnp.arange(us.shape[0])
         return jnp.sum(jax.vmap(self.running_cost)(xs[:-1], us, step_range)) + self.terminal_cost(xs[-1])
 
+jax.tree_util.register_pytree_node(
+    TotalCost,
+    lambda tc: ((tc.running_cost, tc.terminal_cost), None),
+    lambda aux, children: TotalCost(*children),
+)
+
 
 class EulerIntegrator(NamedTuple):
     """Discrete time dynamics from time-invariant continuous time dynamics using the Euler method."""
@@ -157,7 +165,7 @@ class RK4Integrator(NamedTuple):
         return x + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
 
-@functools.partial(jax.jit, static_argnames=["dynamics", "total_cost", "maxiter"])
+@functools.partial(jax.jit, static_argnames=["dynamics", "maxiter"])
 def iterative_linear_quadratic_regulator(dynamics, total_cost, x0, u_guess, maxiter=100, atol=1e-3):
     running_cost, terminal_cost = total_cost
     n, (N, m) = x0.shape[-1], u_guess.shape
@@ -223,3 +231,69 @@ def iterative_linear_quadratic_regulator(dynamics, total_cost, x0, u_guess, maxi
         "optimal_cost": j,
         "num_iterations": i,
     }
+
+class RunningCost(NamedTuple):
+    env: Environment
+    dt:  jnp.array
+
+    def __call__(self, state, control, step):
+        asteroids = self.env.asteroids.at_time(step * self.dt)
+        separation_distance = jnp.where(
+            jnp.isnan(asteroids.radius), np.inf,
+            jnp.linalg.norm(
+                self.env.wrap_vector(state[:2] - asteroids.center), axis=-1
+            ) - asteroids.radius - self.env.ship_radius
+        )
+        collision_avoidance_penalty = jnp.sum(
+            jnp.where(separation_distance > 0.3, 0,
+                      1e4 * (0.3 - separation_distance) ** 2)
+        )
+        r, a = control
+        yaw_rate_penalty     = 1e4 * jnp.maximum(jnp.abs(r) - np.pi / 2, 0) ** 2
+        acceleration_penalty = 1e4 * jnp.maximum(jnp.abs(a) - 4, 0) ** 2
+        return collision_avoidance_penalty + yaw_rate_penalty + acceleration_penalty + r**2 + a**2
+
+
+class FullHorizonTerminalCost(NamedTuple):
+    env:           Environment
+    goal_position: jnp.array
+
+    @classmethod
+    def create_ignoring_extra_args(cls, env, goal_position, *args, **kwargs):
+        return cls(env, goal_position)
+
+    def __call__(self, state):
+        return 1000.0 * (
+            jnp.sum(jnp.square(state[:2] - self.goal_position))
+            + state[3] ** 2
+            + state[4] ** 2
+        )
+
+
+def compute_nominal_trajectory(dynamics, env, start_state, goal_position, T, verbose=True):
+    u_init    = np.zeros((T, 2))
+    empty_env = Environment.create(0)
+
+    if verbose:
+        print("Stage 1: empty environment...", end=" ", flush=True)
+    stage1 = iterative_linear_quadratic_regulator(
+        dynamics,
+        TotalCost(RunningCost(empty_env, dynamics.dt),
+                  FullHorizonTerminalCost(empty_env, jnp.array(goal_position))),
+        jnp.array(start_state), jnp.array(u_init),
+    )
+    if verbose:
+        print(f"done ({stage1['num_iterations']} iters)")
+
+    if verbose:
+        print("Stage 2: full asteroid environment...", end=" ", flush=True)
+    stage2 = iterative_linear_quadratic_regulator(
+        dynamics,
+        TotalCost(RunningCost(env, dynamics.dt),
+                  FullHorizonTerminalCost(env, jnp.array(goal_position))),
+        jnp.array(start_state), stage1["optimal_trajectory"][1],
+    )
+    if verbose:
+        print(f"done ({stage2['num_iterations']} iters, cost={stage2['optimal_cost']:.2f})")
+
+    return jax.tree_util.tree_map(np.array, stage2)

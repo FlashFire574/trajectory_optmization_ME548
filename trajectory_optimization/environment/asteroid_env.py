@@ -101,35 +101,77 @@ class Environment(NamedTuple):
                 ))
             plan_line    = ax.plot(plan[:, 0],    plan[:, 1],    color="green")[0]
             history_line = ax.plot(history[:, 0], history[:, 1], color="blue")[0]
+        
         else:
             fig = ax.figure
-            asteroids, ship, circle, thruster = ax.collections
-            plan_line, history_line = ax.lines
+            if len(ax.collections) == 0:
+                # Fresh axis passed in — initialize collections same as new figure
+                asteroids = ax.add_collection(
+                    matplotlib.collections.PatchCollection(
+                        [plt.Circle(np.zeros(2), r) for r in self.asteroids.radius] * 4,
+                        offsets=np.zeros(2),
+                        transOffset=matplotlib.transforms.AffineDeltaTransform(ax.transData),
+                        color="black",
+                    ))
+                ship = ax.add_collection(
+                    matplotlib.collections.PatchCollection(
+                        [plt.Polygon(self.ship_radius * np.array([[-.2, -.4], [1., 0], [-.2, .4]]))] * 4,
+                        offsets=np.zeros(2),
+                        transOffset=matplotlib.transforms.AffineDeltaTransform(ax.transData),
+                        color="orange",
+                        zorder=10,
+                    ))
+                circle = ax.add_collection(
+                    matplotlib.collections.PatchCollection(
+                        [plt.Circle(np.zeros(2), self.sensing_radius)] * 4,
+                        offsets=np.zeros(2),
+                        transOffset=matplotlib.transforms.AffineDeltaTransform(ax.transData),
+                        facecolor=(0, 0, 0, 0),
+                        edgecolor="black",
+                        linestyle="--",
+                        zorder=10,
+                    ))
+                thruster = ax.add_collection(
+                    matplotlib.collections.PatchCollection(
+                        [plt.Polygon(self.ship_radius * np.array([[-1., 0.], [0., -.25], [0., .25]]))] * 4,
+                        offsets=np.zeros(2),
+                        transOffset=matplotlib.transforms.AffineDeltaTransform(ax.transData),
+                        color="red",
+                        zorder=5,
+                    ))
+                plan_line    = ax.plot(plan[:, 0], plan[:, 1], color="green")[0]
+                history_line = ax.plot(history[:, 0], history[:, 1], color="blue")[0]
+                ax.set_xlim(0, self.bounds[0])
+                ax.set_ylim(0, self.bounds[1])
+                ax.set_aspect(1)
+            else:
+                asteroids, ship, circle, thruster = ax.collections
+                plan_line, history_line = ax.lines
 
-        screen_offsets = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-        asteroids.set_offsets(
-            (self.wrap_vector(self.asteroids.center)
-             + self.bounds * screen_offsets[:, None, :]).reshape(-1, 2)
-        )
-        if sensor:
-            asteroids.set_alpha(
-                np.where(np.isnan(self.sense(pose[:2]).asteroids.radius), 0.1, 1.0)
-            )
-        ship.set_offsets(self.wrap_vector(pose[:2]) + self.bounds * screen_offsets)
-        ship.set_transform(
-            matplotlib.transforms.Affine2D().rotate(pose[2]) + ax.transData
-        )
-        circle.set_offsets(
-            self.wrap_vector(pose[:2] if sensor else np.full(2, np.nan))
-            + self.bounds * screen_offsets
-        )
-        thruster.set_offsets(self.wrap_vector(pose[:2]) + self.bounds * screen_offsets)
-        thruster.set_transform(
-            matplotlib.transforms.Affine2D()
-            .scale(0.2 + 0.8 * scaled_thrust, 1)
-            .rotate(pose[2])
-            + ax.transData
-        )
+                screen_offsets = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+                asteroids.set_offsets(
+                    (self.wrap_vector(self.asteroids.center)
+                    + self.bounds * screen_offsets[:, None, :]).reshape(-1, 2)
+                )
+                if sensor:
+                    asteroids.set_alpha(
+                        np.where(np.isnan(self.sense(pose[:2]).asteroids.radius), 0.1, 1.0)
+                    )
+                ship.set_offsets(self.wrap_vector(pose[:2]) + self.bounds * screen_offsets)
+                ship.set_transform(
+                    matplotlib.transforms.Affine2D().rotate(pose[2]) + ax.transData
+                )
+                circle.set_offsets(
+                    self.wrap_vector(pose[:2] if sensor else np.full(2, np.nan))
+                    + self.bounds * screen_offsets
+                )
+                thruster.set_offsets(self.wrap_vector(pose[:2]) + self.bounds * screen_offsets)
+                thruster.set_transform(
+                    matplotlib.transforms.Affine2D()
+                    .scale(0.2 + 0.8 * scaled_thrust, 1)
+                    .rotate(pose[2])
+                    + ax.transData
+                )
 
         def tile_line(line):
             if line.shape[0] == 0:
