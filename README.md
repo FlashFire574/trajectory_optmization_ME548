@@ -1,6 +1,6 @@
 # trajectory_optmization_ME548
 # TODO:
-1) Implement iLQR.
-2) Implement sensing scripts.
-4) Set config for cost matrices.
-3) Check if notebook runs properly.
+1) Implement sensing scripts.
+2) Setup the start point of simulation and end point
+3) Deepdive metrics for understanding which constraints for time and fuel burn
+4) Go through code to understand any remaining issues or bugs.
