@@ -1,4 +1,4 @@
-# =============================================================================
+
 # utils/sensing.py
 # Receding-horizon MPC simulation with limited sensing.
 #
@@ -18,8 +18,7 @@
 #   simulate_mpc_open   — pure iLQR MPC, no external controller
 #   simulate_with_sensing — wraps any BaseController with sensing-aware
 #                           replanning so PID / State Feedback / CBF also
-#                           benefit from local obstacle information
-# =============================================================================
+#                           benefit from local obstacle informatio
 
 import functools
 from typing import Optional, Type
@@ -36,10 +35,7 @@ from environment.ilqr import (
     iterative_linear_quadratic_regulator,
 )
 
-
-# =============================================================================
-# SECTION A — Core MPC policy (single step)
-# =============================================================================
+# SECTION A — Core MPC policy (single step
 
 @functools.partial(jax.jit, static_argnames=["running_cost_type",
                                               "terminal_cost_type",
@@ -71,11 +67,11 @@ def mpc_policy_step(
         control : (r, a) — first control of the replanned sequence
         plan    : (states, controls) — full N-step plan for visualization
     """
-    # ── Step 1: apply sensing filter ─────────────────────────────────────────
+    #  Step 1: apply sensing filter
     sensed_env = env.sense(state[:2]) if limited_sensing else env
     empty_env  = Environment.create(0)
 
-    # ── Step 2: Stage 1 warm-start on empty environment ──────────────────────
+    #  Step 2: Stage 1 warm-start on empty environment 
     stage1 = iterative_linear_quadratic_regulator(
         dynamics,
         TotalCost(
@@ -89,7 +85,7 @@ def mpc_policy_step(
         jnp.zeros((N, 2)),
     )
 
-    # ── Step 3: Stage 2 replan on sensed environment ─────────────────────────
+    #  Step 3: Stage 2 replan on sensed environment
     stage2 = iterative_linear_quadratic_regulator(
         dynamics,
         TotalCost(
@@ -108,10 +104,7 @@ def mpc_policy_step(
     # Return only the first control action (receding horizon)
     return plan_controls[0], (plan_states, plan_controls)
 
-
-# =============================================================================
-# SECTION B — Pure iLQR MPC simulation (no external controller)
-# =============================================================================
+# Pure iLQR MPC simulation
 
 def simulate_mpc(
     start_state,
@@ -213,11 +206,8 @@ def simulate_mpc(
         "collision_step":  collision_step,
     }
 
-
-# =============================================================================
 # SECTION C — Sensing wrapper for external controllers
-#             (PID, State Feedback, CBF-CLF-QP)
-# =============================================================================
+#             (PID, State Feedback, CBF-CLF-QP
 
 def simulate_with_sensing(
     controller,
@@ -282,13 +272,14 @@ def simulate_with_sensing(
     collision      = False
     collision_step = T
     success        = False
+    goal_reached   = False
     traversal_time = T
 
     for k in range(T):
-        # ── Move asteroids ────────────────────────────────────────────────────
+        #  Move asteroids─
         env_k = env.at_time(k * dt)
 
-        # ── Apply sensing filter ──────────────────────────────────────────────
+        #  Apply sensing filter
         # env_sensed has NaN radii for asteroids beyond sensing_radius.
         # Controllers that use env_k for CBF constraints will naturally
         # ignore unseen asteroids because NaN distances are filtered.
@@ -298,7 +289,7 @@ def simulate_with_sensing(
         visible = int(np.sum(~np.isnan(np.array(env_sensed.asteroids.radius))))
         sensed_counts.append(visible)
 
-        # ── Compute control ───────────────────────────────────────────────────
+        #  Compute control
         # CBF-CLF-QP controllers may accept env_sensed as extra arg;
         # PID and State Feedback ignore it (they track xs_nom directly).
         try:
@@ -310,20 +301,20 @@ def simulate_with_sensing(
 
         u = jnp.array(u)
 
-        # ── Step dynamics ─────────────────────────────────────────────────────
+        #  Step dynamics
         state = dynamics(state, u, k)
 
         history.append(np.array(state))
         controls.append(np.array(u))
 
-        # ── Tracking error ────────────────────────────────────────────────────
+        #  Tracking error─
         track_err = float(np.linalg.norm(
             np.array(state[:2]) - np.array(xs_nom[k, :2])
         ))
         tracking_errors.append(track_err)
         control_efforts.append(float(np.sum(np.array(u) ** 2)))
 
-        # ── Collision check ───────────────────────────────────────────────────
+        #  Collision check
         from utils.metrics import check_collision
         if not collision and check_collision(np.array(state[:2]), env_k, env.ship_radius):
             collision      = True
@@ -331,11 +322,15 @@ def simulate_with_sensing(
             if verbose:
                 print(f"  Collision at step {k+1}")
 
-        # ── Goal check ────────────────────────────────────────────────────────
+        #  Goal check
         dist = np.linalg.norm(np.array(state[:2]) - np.array(goal_position))
-        if dist < goal_threshold and not success:
+        if dist < goal_threshold and not goal_reached:
             traversal_time = k + 1
-            success        = not collision
+            goal_reached = True
+            # Lock success at the moment of arrival (consistent with simulate_mpc).
+            # A later drift-collision after the goal must not retroactively fail
+            # a trial that cleanly reached the goal.
+            success = not collision
             if verbose:
                 print(f"  Goal reached at step {k+1}  dist={dist:.2f}m")
 
@@ -350,7 +345,8 @@ def simulate_with_sensing(
         "tracking_errors":  np.array(tracking_errors),  # (T,)
         "control_efforts":  np.array(control_efforts),  # (T,)
         "traversal_time":   traversal_time,
-        "success":          success and not collision,
+        "goal_reached": goal_reached,
+        "success":      success,
         "collision":        collision,
         "collision_step":   collision_step,
     }

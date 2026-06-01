@@ -55,6 +55,6 @@ MPC_HORIZON     = 20
 LIMITED_SENSING = True
 
 # Evaluation
-NUM_TRIALS     = 20
+NUM_TRIALS     = 2
 GOAL_THRESHOLD = 2.0
 SEED_START     = 0

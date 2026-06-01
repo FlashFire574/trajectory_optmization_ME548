@@ -110,13 +110,13 @@ class PositionPIDController(BaseController):
             + self.Kd_pos * derivative
         )
 
-        # Desired heading from position error─
+        # Desired heading from position error
         desired_heading = np.arctan2(pid_output[1], pid_output[0])
         heading_error   = desired_heading - theta
         # Wrap heading error to [-π, π]
         heading_error   = (heading_error + np.pi) % (2 * np.pi) - np.pi
 
-        # Turn rate r from heading error (P control)
+        # Turn rate r from heading error
         r = self.Kp_heading * heading_error
         r = np.clip(r, -self.r_limit, self.r_limit)
 

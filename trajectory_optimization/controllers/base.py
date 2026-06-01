@@ -1,9 +1,7 @@
-# =============================================================================
 # controllers/base.py
 # Abstract base class for all controllers.
 # Every controller must implement __call__ with this exact signature so the
 # evaluation harness (utils/metrics.py) can treat all controllers identically.
-# =============================================================================
 
 from abc import ABC, abstractmethod
 import jax.numpy as jnp

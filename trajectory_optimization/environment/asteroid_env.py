@@ -145,8 +145,8 @@ class Environment(NamedTuple):
                 ax.set_ylim(0, self.bounds[1])
                 ax.set_aspect(1)
             else:
-                asteroids, ship, circle, thruster = ax.collections
-                plan_line, history_line = ax.lines
+                asteroids, ship, circle, thruster, *extra = ax.collections
+                plan_line, history_line, *extra_lines = ax.lines
 
                 screen_offsets = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
                 asteroids.set_offsets(
