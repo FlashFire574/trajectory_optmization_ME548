@@ -97,8 +97,11 @@ def evaluate_controller(
     all_collision_free = []
 
     for trial in range(num_trials):
-        seed = seed_start + trial
-        np.random.seed(seed)
+        rng = np.random.RandomState(seed_start + trial)
+        centers   = rng.rand(num_asteroids, 2) * np.array(bounds)
+        radii     = 1 + 2 * rng.rand(num_asteroids)
+        velocities = rng.randn(num_asteroids, 2)
+        from environment.asteroid_env import Asteroid
         env = Environment.create(
             num_asteroids,
             ship_radius    = ship_radius,
