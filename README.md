@@ -1,6 +1,6 @@
 # Trajectory Optimization in Uncertain Environments
 
-**Author:** Aditya Joshi | Student ID: 2530019
+**Author:** Aditya Joshi
 
 ## Overview
 
